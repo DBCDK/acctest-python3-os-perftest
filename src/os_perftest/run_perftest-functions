@@ -1,0 +1,315 @@
+#!/bin/bash
+
+assertVariableIsNonEmpty() {
+    # Asserts that named environment variable is set to non-empty value
+    name=$1
+    eval value=\$$name
+    if [ -z "$value" ] ; then
+        echo "$name must be set"
+        exit 1
+    fi
+    echo "$name set to $value"
+}
+
+refreshBuildScripts() {
+    # $1 build script dir
+    echo "*Refreshing build scripts"
+    local build_script_folder=$1
+    local script_dir=`pwd`
+
+    cd $build_script_folder
+    LOCKFILE=.lock
+    FLOCK=
+    if type flock >/dev/null 2>&1; then
+        FLOCK="flock -n $LOCKFILE"
+        if [ ! -e $LOCKFILE ]; then
+            echo flock > $LOCKFILE
+        fi
+    fi
+    $FLOCK svn up || echo "WARNING: build-script not updated"
+    cd $script_dir
+}
+
+convertAddiToXml() {
+    # $1 addi file dir
+    echo "*Generating test data from ADDI files"
+    local addi_dir=$1
+    local script_dir=`pwd`
+
+    cd es-files/addi
+    cd $addi_dir
+    for archive in $(find . -name "*.tar.bz")
+    do
+        echo "*found test data archive $archive"
+        tar -jxf $archive
+    done
+    for addi_file in $(find . -name "*.addi")
+    do
+        $script_dir/opret_tp_addi/bin/convert_addi_to_xml.py --file_harvester_light -f $addi_file -d $script_dir/es-files/Harvest
+        rm $addi_file
+    done
+    ls -1 $script_dir/es-files/Harvest | wc -l
+    cd $script_dir
+}
+
+opretTpAddi() {
+    # $1 addi file dir
+    local addi_dir=$1
+    local jdbc_driver=$2
+    local jdbc_url=$3
+    local db_user=$4
+    local db_pass=$5
+    local db_name=$6
+    local db_url="${jdbc_url#*@}"
+
+    echo "*Generating test data from ADDI files"
+    local script_dir=`pwd`
+
+    cd $addi_dir
+    for archive in $(find . -name "*.tar.bz")
+    do
+        echo "*found test data archive $archive"
+        tar -jxf $archive
+    done
+    for addi_file in $(find . -name "*.addi")
+    do
+        #echo "[ES Harvester]" > esconfig.cfg
+        #echo "elementsetname = esn" >> esconfig.cfg
+        #echo "action = 3" >> esconfig.cfg
+        #echo "creator = opret_tp_addi" >> esconfig.cfg
+        #echo "addifilename = $addi_dir/$addi_file" >> esconfig.cfg
+        #echo "userid = 2" >> esconfig.cfg
+        #echo "databasename = $db_name" >> esconfig.cfg
+        #echo "schema = addi" >> esconfig.cfg
+        #echo "oralogin = $db_user/$db_pass@$db_url" >> esconfig.cfg
+        #echo "Inserting $addi_file in ES Base"
+        #cd ../../opret_tp_addi/bin
+        #pwd
+        #python opretTP_addi.py -c esconfig.cfg
+        #cd ../../es-files/addi-es
+        #This should work in stead of the above, but it causes "java.sql.SQLRecoverableException: IO Error: Connection reset" errors from DB
+        java -cp $script_dir/release/hive.jar dk.dbc.commons.es.ESUtil insertAddi $jdbc_driver $jdbc_url $db_user $db_pass $db_name $addi_file
+        rm $addi_file
+    done
+    #local COUNT=`java -cp $script_dir/release/hive.jar dk.dbc.commons.es.ESUtil countResults $jdbc_driver $jdbc_url $db_user $db_pass $db_name`
+    #echo "Count = $COUNT"
+    cd $script_dir
+}
+
+createEsDb() {
+    local jdbc_driver=$1
+    local jdbc_url=$2
+    local db_user=$3
+    local db_pass=$4
+    echo "* Creating ES DB on $jdbc_url"
+    ES_DB_NAME=`java -cp release/hive.jar dk.dbc.commons.es.ESUtil createDBName $jdbc_driver $jdbc_url $db_user $db_pass`
+    echo "* Created ES DB $ES_DB_NAME"
+}
+
+deleteEsDb() {
+    echo "* Deleting ES DB $ES_DB_NAME"
+    local jdbc_driver=$1
+    local jdbc_url=$2
+    local db_user=$3
+    local db_pass=$4
+    local db_name=$5
+    java -cp release/hive.jar dk.dbc.commons.es.ESUtil deleteDBName $jdbc_driver $jdbc_url $db_user $db_pass $db_name
+}
+
+unpackTarBzFiles() {
+    echo "*Unpacking tar.bz files"
+    local source_dir=$1
+    local destination_dir=$2
+    local script_dir=`pwd`
+
+    cd $destination_dir
+    for tarbzfile in $(find $source_dir -name "*.tar.bz")
+    do
+        echo "*Unpacking file $tarbzfile to $destination_dir"
+        tar -jxf $tarbzfile
+    done
+    cd $script_dir
+}
+
+rawurlencode() {
+  local string="${1}"
+  local strlen=${#string}
+  local encoded=""
+
+  for (( pos=0 ; pos<strlen ; pos++ )); do
+     c=${string:$pos:1}
+     case "$c" in
+        [-_.~a-zA-Z0-9] ) o="${c}" ;;
+        * )               printf -v o '%%%02x' "'$c"
+     esac
+     encoded+="${o}"
+  done
+  echo "${encoded}"
+}
+
+buildOpensearchReleaseToBeTested() {
+    # $1 build script dir
+    # $2 master-project
+    # $3 build number
+    # $4 output folder
+    echo "*Building opensearch release to be tested"
+    local build_script_folder=$1
+    local master_project=$2
+    local build_number=$3
+    local output_folder=$4
+
+    JOB_NAME=$master_project $build_script_folder/os-release-packaging.sh $build_script_folder $build_number
+    rm -rf $output_folder
+    mv $build_number $output_folder
+    rm $build_number.tgz $build_number.tgz.md5
+}
+
+getGluDistribution() {
+    # $1 Glu distribution path
+    echo "*Retrieving Glu distribution"
+    local glu_distribution=$1
+
+    local resources_folder=`dirname $glu_distribution`
+    echo $resources_folder
+    mkdir $resources_folder
+
+    curl -o $glu_distribution http://is.dbc.dk/job/opensearch-3rd-party-dependencies/lastSuccessfulBuild/artifact/trunk/ARTIFACTS/org.linkedin.glu.packaging-all-4.7.2/org.linkedin.glu.packaging-all-4.7.2.tgz
+}
+
+getGluTools() {
+    # $1 Glu tools folder
+    echo "*Retrieving Glu tools suite"
+    local glu_tools_folder=$1
+
+    rm -rf $glu_tools_folder
+    svn export https://svn.dbc.dk/repos/glu-tools/trunk $glu_tools_folder
+}
+
+writeGluToolsDefaults() {
+    # $1 Glu tools folder
+    # $2 Glu home folder
+    # $3 Glu agent fabric
+    # $4 Glu zookeepers
+    echo "*Writing Glu tools defaults"
+    local glu_tools_folder=$1
+    local glu_home_folder=$2
+    local glu_agent_fabric=$3
+    local glu_zookeepers=$4
+
+    echo "GLU_HOME=$glu_home_folder"           > $glu_tools_folder/glu
+    echo "GLU_AGENT_FABRIC=$glu_agent_fabric" >> $glu_tools_folder/glu
+    echo "GLU_ZOOKEEPER=$glu_zookeepers"      >> $glu_tools_folder/glu
+}
+
+installGluAgent() {
+    # $1 Glu tools folder
+    # $2 Glu distribution path
+    # $3 Glu home folder
+    echo "*Installing Glu agent"
+    local glu_tools_folder=$1
+    local glu_distribution=$2
+    local glu_home_folder=$3
+    local script_dir=`pwd`
+
+    rm -rf $glu_home_folder
+    mkdir $glu_home_folder
+    cd $glu_tools_folder
+    ./glu-agent install $glu_distribution
+
+    cd $script_dir
+}
+
+startGluAgent() {
+    # $1 Glu tools folder
+    echo "*Starting Glu agent"
+    local glu_tools_folder=$1
+    local script_dir=`pwd`
+
+    cd $glu_tools_folder
+    ./glu-agent start
+
+    # Allow time for agent to sync with zookeeper state info
+    sleep 10
+
+    cd $script_dir
+}
+
+stopGluAgent() {
+    # $1 Glu tools folder
+    echo "*Stopping Glu agent"
+    local glu_tools_folder=$1
+    local script_dir=`pwd`
+
+    cd $glu_tools_folder
+    ./glu-agent stop
+
+    cd $script_dir
+}
+
+unpackSnapshotArchive() {
+    # $1 snapshot archive
+    # $2 snapshot destination folder
+    echo "*Unpacking snapshot archive"
+    local snapshot_archive=$1
+    local snapshot_folder=$2
+    local script_dir=`pwd`
+
+    mkdir -p $snapshot_folder
+    cd $snapshot_folder
+    tar -zxf $snapshot_archive
+
+    cd $script_dir
+}
+
+populatePostgresqlDB() {
+    echo "*populating db $1"
+    local snapshot=$1
+    local dburl=$2
+    local dbuser=$3
+
+    # extract the protocol
+    proto="$(echo $dburl | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+    # remove the protocol
+    url="$(echo ${dburl/$proto/})"
+    # extract the user (if any)
+    user="$(echo $url | grep @ | cut -d@ -f1)"
+    # extract the host
+    host="$(echo ${url/$user@/} | cut -d: -f1)"
+    # extract the port
+    port="$(echo ${url/$user@/} | cut -d: -f2 | cut -d/ -f1)"
+    # extract the path (if any)
+    dbname="$(echo $url | grep / | cut -d/ -f2-)"
+
+    echo "psql --no-password -h $host -p $port -U $dbuser -f $snapshot $dbname"
+    psql --no-password -h $host -p $port -U $dbuser -f $snapshot $dbname
+}
+
+archiveApplicationLogs() {
+    # $1 src folder to archive (recursively)
+    echo "*archiving application logs"
+    local src_dir=$1
+    local dst_dir=$ROOT/logs
+    local zip_file=$ROOT/logs.zip
+
+    rm -rf $dst_dir
+    mkdir $dst_dir
+    rm -f $zip_file
+    rsync -avzm --include "*/" --include "*.log" --include "*.log.*" --include "*.out" --exclude "*" $src_dir $dst_dir
+    find $dst_dir -type d -empty -delete
+    zip -r $zip_file $dst_dir
+    rm -rf $dst_dir
+}
+
+setPythonPath() {
+    local package_dir=$1
+    PP=$PYTHONPATH
+    for package in `ls $package_dir`
+    do
+        if [ "$PP" = "" ]; then
+            PP="$package_dir/$package"
+        else
+            PP="$PP:$package_dir/$package"
+        fi
+    done
+    PYTHONPATH=$PP
+}

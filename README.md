@@ -1,10 +1,12 @@
-# acctest-python3-template
+# acctest-python3-os-perftest
 
-## This is a template package
+## OS perftest package
+
+Migrated from https://svn.dbc.dk/repos/os-perftest/trunk
 
 When running stand alone the package-name is taken from the current directory name
 
-ie. `acctest-python3-template` will become `template-dbc` as the python module and `python3-template-dbc` as package name
+ie. `acctest-python3-os-perftest` will become `os-perftest-dbc` as the python module and `python3-os-perftest-dbc` as package name
 
 When building using `Jenkinsfile` the `JOB_NAME` is used to determine package name.
 And the packages are uploaded for `apt-get install`.

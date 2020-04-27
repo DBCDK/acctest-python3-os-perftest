@@ -82,9 +82,9 @@ pipeline {
             junit 'nosetests.xml'
             sh ' chown -R --reference=. . '
         }
-        failure {
+        /*failure {
             script {
-                /*if ("${env.BRANCH_NAME}" == 'master') {
+                if ("${env.BRANCH_NAME}" == 'master') {
                     emailext(
                             recipientProviders: [developers(), culprits()],
                             to: "${ownerEmail}",
@@ -105,9 +105,9 @@ pipeline {
                             mimeType: 'text/html; charset=UTF-8',
                             body: "<p>${env.BUILD_TAG} failed and needs your attention. </p><p><a href=\"${env.BUILD_URL}\">Build information</a>.</p>",
                             attachLog: false)
-                }*/
+                }
             }
-        }
+        }*/
     }
 }
 

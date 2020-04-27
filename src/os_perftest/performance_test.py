@@ -17,9 +17,6 @@ from os_python.common.utils.init_functions import log_fields
 from os_python.common.utils.init_functions import die
 from os_python.common.utils.cleanupstack import CleanupStack
 
-import dependency_manager.create_package as create_package
-import dependency_manager.dependency_manager as dependency_manager
-
 import os_perftest.performance_report as performance_report
 from os_perftest.performance_dumper import MBeanDumper
 from os_perftest.performance_report import PerformanceReport
@@ -60,12 +57,6 @@ class PerformanceTest:
 
     def start(self):
         configuration = self.configuration
-
-        if not configuration['use-preloaded']:
-            self._download_resources(configuration['resource-folder'],
-                               configuration['job-name'],
-                               configuration['build-number'],
-                               configuration['jenkins'])
 
         self._delete_folders(configuration['build-folder'])
         services = self.create_services(configuration)
@@ -129,36 +120,6 @@ class PerformanceTest:
             if os.path.exists(folder):
                 logger.debug("Deleting folder " + folder)
                 shutil.rmtree(folder)
-
-    def _download_resources(self, resource_folder, job_name, build_number, jenkins_configuration):
-        """ Downloads necessary artifacts
-        """
-        self._delete_folders(resource_folder)
-        os.mkdir(resource_folder)
-
-        dependency_manager.build_dependency_file(job_name,
-                                                 build_number,
-                                                 jenkins_configuration['dependency-filename'],
-                                                 jenkins_configuration['server'],
-                                                 jenkins_configuration['repository-project'])
-
-
-        create_package.download_artifacts(resource_folder,
-                                          jenkins_configuration['resource-pattern'],
-                                          jenkins_configuration['dependency-filename'],
-                                          jenkins_configuration['server'],
-                                          jenkins_configuration['repository-project'])
-
-        artifacts = []
-        for name, url in create_package.yield_view_jobs(jenkins_configuration['server'],
-                                                        jenkins_configuration['user'],
-                                                        jenkins_configuration['view']):
-
-            project_artifacts = create_package._get_description_artifacts(name, url, "RELEASE")
-            artifacts += [x for x in project_artifacts if re.match(jenkins_configuration['resource-pattern'], x[1])]
-
-        create_package.check_md5_sums(resource_folder)
-        create_package.create_symlinks(resource_folder, artifacts)
 
     def dump_statistics(self, filename, *mBean_pair):
         """ Dumps mbean statistics to file (through jolokia)"""

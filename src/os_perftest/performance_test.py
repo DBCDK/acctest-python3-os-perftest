@@ -13,9 +13,9 @@ import time
 import zipfile
 from configobj import ConfigObj
 
-from dbc_python.utils.init_functions import log_fields
-from dbc_python.utils.init_functions import die
-from dbc_python.utils.cleanupstack import CleanupStack
+from os_python.common.utils.init_functions import log_fields
+from os_python.common.utils.init_functions import die
+from os_python.common.utils.cleanupstack import CleanupStack
 
 import dependency_manager.create_package as create_package
 import dependency_manager.dependency_manager as dependency_manager

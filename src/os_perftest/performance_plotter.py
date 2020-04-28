@@ -49,7 +49,7 @@ def _update_line_colors(lines):
 def _has_values(value_list):
     if value_list is not None:
         for value in value_list:
-            if value > 0:
+            if str(value).isdigit():
                 return True
     return False
 

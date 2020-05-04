@@ -104,6 +104,7 @@ class MBeanDumper( object ):
 
     def dump( self, *mBean_pair, **kwargs):
 
+        # Max history 70 plots. Older data will be truncated
         count = kwargs.get('count', 70);
 
         full_dump = self._read_dump()

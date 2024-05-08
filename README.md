@@ -1,5 +1,7 @@
 # acctest-python3-os-perftest
 
+Archived 08/05-2025, Not used by DBC Digital any more
+
 ## OS perftest package
 
 Migrated from https://svn.dbc.dk/repos/os-perftest/trunk
